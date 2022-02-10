@@ -4,10 +4,10 @@ The code has been tested under Pytorch 1.8
 
 To test the code, simply run the following command  
 ```
-cd <submission2270>
+cd <submission1>
 python slvae.py -d <datasetname>
 ```
-Datasets names are 'jazz', 'jazz_SI', 'cora_ml', 'cora_ml_SI', 'power_grid', 'power_grid_SI', 'karate', 'karate_SI', 'netscience', 'netscience_SI', 'digg', 'meme', 'digg7556', 'meme7884'  
+Datasets names are 'jazz_SIR', 'jazz_SI', 'cora_ml_SIR', 'cora_ml_SI', 'power_grid_SIR', 'power_grid_SI', 'karate_SIR', 'karate_SI', 'netscience_SIR', 'netscience_SI'
 Run the following code to see available parameters that can be passed in:  
 ```
 python slvae.py -h
