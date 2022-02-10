@@ -223,14 +223,6 @@ def x_hat_initialization(model, x_hat, x_true, x, y_true, f_z_bar, test_id, thre
         with torch.no_grad():
             x_hat.clamp_(0, 1)
           
-        print("Test #{} Epoch: {}".format(test_id+1, epoch+1),
-              "\tTotal Loss: {:.5f}".format(loss.item()), 
-              "\tpdf Loss: {:.5f}".format(pdf_loss.item()),
-              "\tx Loss: {:.5f}".format(loss_seed_x(x_true, x_hat, loss_type='bce').item()),
-              "\tPrec: {:.5f}".format(precision), 
-              "\tRec: {:.5f}".format(recall),
-              "\tF1: {:.5f}".format(f1)
-              )
         initial_x.append(x_hat)
         initial_x_f1.append(f1)
         
@@ -271,45 +263,94 @@ for test_id, test in enumerate(test_set):
                                                      lr=5e-2, epochs=30)
 
     with torch.no_grad():
-#             init_x = torch.sigmoid(initial_x[initial_x_prec.index(max(initial_x_prec))])
-        init_x = initial_x[initial_x_prec.index(max(initial_x_prec))]
-    #init_x = torch.bernoulli(init_x)
+#             init_x =x_comparison = {}
 
-    init_x.requires_grad=True
+for test_id, test in enumerate(test_set):
+    precision_all = 0
+    recall_all = 0
+    f1_all = 0
+    auc_all = 0
+    for i in range(test.shape[0]):
+        train_x = torch.tensor(train_set[:][:, 0, : ,:][:, :, 0]).float().to(device)
+        train_y = torch.tensor(train_set[:][:, 0, : ,:][:, :, 1]).float().to(device)
+        x_true = torch.tensor(test[i, :, 0]).float().unsqueeze(0).to(device)
+        x_true = x_true.unsqueeze(-1)
+        y_true = torch.tensor(test[i, :, 1]).float().unsqueeze(0).to(device)
 
-    input_optimizer = Adam([init_x], lr=1e-1)
-    BN = nn.BatchNorm1d(1, affine=False).to(device)
+        # print(x_input.shape)
+        with torch.no_grad():
+            mean, var = encoder(train_x)
+            z_all = vae_model.reparameterization(mean, var)
+            # Getting \bar z from all the z's    
+            z_bar = torch.mean(z_all, dim=0)
 
-    print("Inference Starting...")
-    for epoch in range(5):
-        input_optimizer.zero_grad()
-        y_hat = forward_model(init_x)
-        loss, forward_loss = loss_inverse(y_true, y_hat, init_x, f_z_all, BN)
-        print(init_x)
+            f_z_all = decoder(z_all)
+            f_z_bar = decoder(z_bar)
 
-        x_pred = init_x.clone().cpu().detach().numpy()
+            x_hat = torch.sigmoid(torch.randn(f_z_all[:1].shape)).unsqueeze(-1).to(device)
 
-        auc = roc_auc_score(x[0], x_pred[0])
+            #x_hat = torch.bernoulli(x_hat)
 
-        x_pred[x_pred > 0.55] = 1
-        x_pred[x_pred != 1] = 0
-        precision = precision_score(x[0], x_pred[0])
-        recall = recall_score(x[0], x_pred[0])
-        f1 = f1_score(x[0], x_pred[0])
-        accuracy = accuracy_score(x[0], x_pred[0])
-        loss.backward()
-        # print("loss.grad:", torch.sum(init_x.grad))
-        input_optimizer.step()
+        x_hat.requires_grad=True
+        x = x_true.cpu().detach().numpy()
+        # initialization
+
+        print("Getting initialization")
+        initial_x, initial_x_prec = x_hat_initialization(forward_model, x_hat, x_true, x, y_true, 
+                                                         f_z_bar, test_id, threshold=0.3, 
+                                                         lr=5e-2, epochs=20)
 
         with torch.no_grad():
-            init_x.clamp_(0, 1)
-        print("Test #{} Epoch: {:2d}".format(test_id+1, epoch+1),
-              "\tTotal Loss: {:.5f}".format(loss.item()), 
-              "\tx Loss: {:.5f}".format(loss_seed_x(x_true, init_x, loss_type = 'bce').item()),
-              "\tPrec: {:.5f}".format(precision), 
-              "\tRec: {:.5f}".format(recall),
-              "\tF1: {:.5f}".format(f1),
-              "\tAUC: {:.5f}".format(auc),
-              "\tACC {:.5f}".format(accuracy)
-             )
+    #             init_x = torch.sigmoid(initial_x[initial_x_prec.index(max(initial_x_prec))])
+            init_x = initial_x[initial_x_prec.index(max(initial_x_prec))]
+        #init_x = torch.bernoulli(init_x)
+
+        init_x.requires_grad=True
+
+        input_optimizer = Adam([init_x], lr=1e-1)
+        BN = nn.BatchNorm1d(1, affine=False).to(device)
+
+        print("Inference Starting...")
+        for epoch in range(5):
+            input_optimizer.zero_grad()
+            y_hat = forward_model(init_x)
+            loss, forward_loss = loss_inverse(y_true, y_hat, init_x, f_z_all, BN)
+
+            x_pred = init_x.clone().cpu().detach().numpy()
+
+            auc = roc_auc_score(x[0], x_pred[0])
+
+            x_pred[x_pred > 0.55] = 1
+            x_pred[x_pred != 1] = 0
+            precision = precision_score(x[0], x_pred[0])
+            recall = recall_score(x[0], x_pred[0])
+            f1 = f1_score(x[0], x_pred[0])
+            accuracy = accuracy_score(x[0], x_pred[0])
+            loss.backward()
+            # print("loss.grad:", torch.sum(init_x.grad))
+            input_optimizer.step()
+
+            with torch.no_grad():
+                init_x.clamp_(0, 1)
+            print("Test #{} Epoch: {:2d}".format(i+1, epoch+1),
+                  "\tTotal Loss: {:.5f}".format(loss.item()), 
+                  "\tx Loss: {:.5f}".format(loss_seed_x(x_true, init_x, loss_type = 'bce').item()),
+                  "\tPrec: {:.5f}".format(precision), 
+                  "\tRec: {:.5f}".format(recall),
+                  "\tF1: {:.5f}".format(f1),
+                  "\tAUC: {:.5f}".format(auc),
+                  "\tACC {:.5f}".format(accuracy)
+                 )
+            
+        precision_all += precision
+        recall_all += recall
+        f1_all += f1
+        auc_all += auc
+        
+    print("Test finished",
+          "\tTotal Prec: {:.5f}".format(precision_all/test.shape[0]), 
+          "\tTotal Rec: {:.5f}".format(recall_all/test.shape[0]),
+          "\tTotal F1: {:.5f}".format(f1_all/test.shape[0]),
+          "\tTotal AUC: {:.5f}".format(auc_all/test.shape[0])
+         )
 
