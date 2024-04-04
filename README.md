@@ -1,6 +1,6 @@
 # SLVAE
 
-The code has been tested under Pytorch 1.8
+The code has been tested under Pytorch 1.8. SLVAE is included in the [GraphSL library](https://github.com/xianggebenben/GraphSL).
 
 To test the code, simply run the following command  
 ```
